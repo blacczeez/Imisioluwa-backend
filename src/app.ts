@@ -3,6 +3,14 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { logger } from './utils/logger';
+import { registerEmailListeners } from './events/listeners/emailListener';
+import { registerStockListeners } from './events/listeners/stockListener';
+import { registerWhatsAppListeners } from './events/listeners/whatsappListener';
+import { registerSSEListeners } from './events/listeners/sseListener';
+import { startPaymentExpiryJob } from './jobs/paymentExpiry';
+import { settingsController } from './controllers/settingsController';
+import { shippingController } from './controllers/shippingController';
+import { sitemapController } from './controllers/sitemapController';
 
 // Load environment variables
 dotenv.config();
@@ -23,6 +31,10 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true,
 }));
+
+// Stripe webhook needs raw body — must come before json middleware
+app.use('/api/payments/webhook/stripe', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -36,6 +48,22 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', adminRoutes);
+
+// Public routes (no auth)
+app.get('/api/settings/payment-methods', settingsController.getPaymentMethods);
+app.get('/api/shipping/rate', shippingController.getRateByCountry);
+
+// Register event listeners
+registerEmailListeners();
+registerStockListeners();
+registerWhatsAppListeners();
+registerSSEListeners();
+
+// Start background jobs
+startPaymentExpiryJob();
+
+// Sitemap
+app.get('/sitemap.xml', sitemapController.generate);
 
 // Health check
 app.get('/health', (req, res) => {

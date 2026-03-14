@@ -32,6 +32,10 @@ model Product {
   description_en String   @db.Text
   description_yo String   @db.Text
   price          Float
+  price_usd      Float?
+  price_gbp      Float?
+  price_eur      Float?
+  weight_kg      Float?
   category_id    String
   image_urls     String[]
   stock_quantity Int      @default(0)
@@ -71,10 +75,14 @@ model Order {
   phone            String
   delivery_address String        @db.Text
   total_amount     Float
-  status           OrderStatus   @default(PENDING)
+  status           OrderStatus   @default(PENDING_PAYMENT)
   payment_status   PaymentStatus @default(PENDING)
   payment_method   String?
   payment_reference String?
+  currency         String    @default("NGN")
+  country          String?
+  shipping_cost    Float     @default(0)
+  payment_gateway  String?
   notes            String?       @db.Text
   created_at       DateTime      @default(now())
   updated_at       DateTime      @updatedAt
@@ -157,6 +165,28 @@ model AdminUser {
   @@map("admin_users")
 }
 
+model ShippingZone {
+  id                  String   @id @default(uuid())
+  name                String
+  countries           String[]
+  currency            String
+  flat_rate           Float
+  free_shipping_above Float?
+  is_active           Boolean  @default(true)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  @@map("shipping_zones")
+}
+
+model Setting {
+  key        String   @id
+  value      String
+  updated_at DateTime @updatedAt
+
+  @@map("settings")
+}
+
 enum Role {
   CUSTOMER
   ADMIN
@@ -168,10 +198,9 @@ enum AdminRole {
 }
 
 enum OrderStatus {
-  PENDING
+  PENDING_PAYMENT
   CONFIRMED
-  PROCESSING
-  SHIPPED
+  OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
 }

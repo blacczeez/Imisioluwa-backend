@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import express from 'express';
 import { body } from 'express-validator';
 import { paymentController } from '../controllers/paymentController';
 import { validate } from '../middleware/validation';
@@ -16,7 +17,19 @@ router.post(
   paymentController.initialize
 );
 
-router.post('/verify', paymentController.verify);
+// Paystack verification
+router.post('/verify/paystack', paymentController.verifyPaystack);
+
+// Stripe verification (from frontend)
+router.post('/verify/stripe', paymentController.verifyStripe);
+
+// Stripe webhook (needs raw body)
+router.post(
+  '/webhook/stripe',
+  express.raw({ type: 'application/json' }),
+  paymentController.stripeWebhook
+);
+
 router.get('/:orderId', paymentController.getByOrderId);
 
 export default router;

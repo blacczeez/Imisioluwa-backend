@@ -14,6 +14,9 @@ router.post(
     body('phone').notEmpty().withMessage('Phone is required'),
     body('delivery_address').notEmpty().withMessage('Delivery address is required'),
     body('items').isArray({ min: 1 }).withMessage('Order items are required'),
+    body('payment_method').isIn(['online', 'cod']).withMessage('Payment method must be online or cod'),
+    body('currency').optional().isIn(['NGN', 'USD', 'GBP', 'EUR']).withMessage('Invalid currency'),
+    body('country').optional().isLength({ min: 2, max: 2 }).withMessage('Country must be ISO 2-letter code'),
     validate,
   ],
   orderController.create

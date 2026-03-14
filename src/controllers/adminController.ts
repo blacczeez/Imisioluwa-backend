@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../utils/database';
 import { paginate } from '../utils/helpers';
 import { logger } from '../utils/logger';
-import { emailService } from '../services/emailService';
+import { orderEmitter, ORDER_EVENTS } from '../events/orderEvents';
 
 export const adminController = {
   // Get dashboard statistics
@@ -117,23 +117,44 @@ export const adminController = {
       const { id } = req.params;
       const { status } = req.body;
 
+      const allowedStatuses = ['CONFIRMED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'];
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({ error: `Invalid status. Allowed: ${allowedStatuses.join(', ')}` });
+      }
+
       const order = await prisma.order.update({
         where: { id },
         data: { status },
         include: {
-          items: {
-            include: { product: true },
-          },
+          items: { include: { product: true } },
         },
       });
 
-      // Send status update email
-      emailService.sendOrderStatusUpdate(
-        order.customer_email,
-        order.order_number,
-        order.customer_name,
-        status
-      );
+      const payload = {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        customerEmail: order.customer_email,
+        phone: order.phone,
+        deliveryAddress: order.delivery_address,
+        totalAmount: order.total_amount,
+        paymentMethod: order.payment_method || 'online',
+        items: order.items.map((item: any) => ({
+          productId: item.product_id,
+          productName: item.product?.name_en || '',
+          quantity: item.quantity,
+          unitPrice: item.unit_price,
+          subtotal: item.subtotal,
+        })),
+      };
+
+      if (status === 'OUT_FOR_DELIVERY') {
+        orderEmitter.emit(ORDER_EVENTS.OUT_FOR_DELIVERY, payload);
+      } else if (status === 'DELIVERED') {
+        orderEmitter.emit(ORDER_EVENTS.DELIVERED, payload);
+      } else if (status === 'CANCELLED') {
+        orderEmitter.emit(ORDER_EVENTS.CANCELLED, payload);
+      }
 
       logger.info(`Order status updated: ${order.order_number} -> ${status}`);
       res.json(order);

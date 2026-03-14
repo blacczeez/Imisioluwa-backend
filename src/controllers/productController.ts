@@ -20,6 +20,7 @@ export const productController = {
 
       const where: any = {
         is_active: is_active === 'true',
+        stock_quantity: { gt: 0 },
       };
 
       if (category) {
@@ -157,7 +158,7 @@ export const productController = {
 
       // Delete associated images
       if (product.image_urls.length > 0) {
-        imageUploadService.deleteMultipleImages(product.image_urls);
+        await imageUploadService.deleteMultipleImages(product.image_urls);
       }
 
       await prisma.product.delete({ where: { id } });
@@ -185,7 +186,7 @@ export const productController = {
         return res.status(404).json({ error: 'Product not found' });
       }
 
-      const imageUrls = files.map((file) => imageUploadService.saveImage(file));
+      const imageUrls = await Promise.all(files.map((file) => imageUploadService.saveImage(file)));
       const updatedImageUrls = [...product.image_urls, ...imageUrls];
 
       const updatedProduct = await prisma.product.update({
@@ -213,7 +214,7 @@ export const productController = {
       }
 
       const updatedImageUrls = product.image_urls.filter((url) => url !== imageUrl);
-      imageUploadService.deleteImage(imageUrl);
+      await imageUploadService.deleteImage(imageUrl);
 
       const updatedProduct = await prisma.product.update({
         where: { id },
