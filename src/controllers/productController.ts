@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/database';
-import { paginate } from '../utils/helpers';
+import { paginate, slugify } from '../utils/helpers';
 import { logger } from '../utils/logger';
 import { imageUploadService } from '../services/imageUploadService';
 
@@ -73,6 +73,27 @@ export const productController = {
     }
   },
 
+  // Get single product by slug (public)
+  getBySlug: async (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+
+      const product = await prisma.product.findUnique({
+        where: { slug },
+        include: { category: true },
+      });
+
+      if (!product) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+
+      res.json(product);
+    } catch (error) {
+      logger.error('Get product by slug error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  },
+
   // Create product (admin only)
   create: async (req: Request, res: Response) => {
     try {
@@ -86,6 +107,13 @@ export const productController = {
         stock_quantity,
       } = req.body;
 
+      // Generate unique slug from name_en
+      let slug = slugify(name_en);
+      const existingSlug = await prisma.product.findUnique({ where: { slug } });
+      if (existingSlug) {
+        slug = `${slug}-${Date.now().toString(36)}`;
+      }
+
       const product = await prisma.product.create({
         data: {
           name_en,
@@ -96,6 +124,7 @@ export const productController = {
           category_id,
           stock_quantity: parseInt(stock_quantity),
           image_urls: [],
+          slug,
         },
         include: { category: true },
       });
@@ -123,6 +152,19 @@ export const productController = {
         is_active,
       } = req.body;
 
+      // Regenerate slug if name_en changes
+      let slugData: { slug?: string } = {};
+      if (name_en) {
+        let slug = slugify(name_en);
+        const existingSlug = await prisma.product.findFirst({
+          where: { slug, id: { not: id } },
+        });
+        if (existingSlug) {
+          slug = `${slug}-${Date.now().toString(36)}`;
+        }
+        slugData = { slug };
+      }
+
       const product = await prisma.product.update({
         where: { id },
         data: {
@@ -134,6 +176,7 @@ export const productController = {
           ...(category_id && { category_id }),
           ...(stock_quantity !== undefined && { stock_quantity: parseInt(stock_quantity) }),
           ...(is_active !== undefined && { is_active }),
+          ...slugData,
         },
         include: { category: true },
       });

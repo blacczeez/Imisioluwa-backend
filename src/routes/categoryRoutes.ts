@@ -7,8 +7,9 @@ import { validate } from '../middleware/validation';
 
 const router = Router();
 
-// Public route
+// Public routes
 router.get('/', categoryController.getAll);
+router.get('/:slug', categoryController.getBySlug);
 
 // Admin routes
 router.post(

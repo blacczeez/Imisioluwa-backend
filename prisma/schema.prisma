@@ -27,6 +27,7 @@ model User {
 
 model Product {
   id             String   @id @default(uuid())
+  slug           String   @unique
   name_en        String
   name_yo        String
   description_en String   @db.Text

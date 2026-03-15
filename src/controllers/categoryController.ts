@@ -23,6 +23,32 @@ export const categoryController = {
     }
   },
 
+  // Get category by slug with its products (public)
+  getBySlug: async (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+
+      const category = await prisma.category.findUnique({
+        where: { slug },
+        include: {
+          products: {
+            where: { is_active: true, stock_quantity: { gt: 0 } },
+            orderBy: { created_at: 'desc' },
+          },
+        },
+      });
+
+      if (!category) {
+        return res.status(404).json({ error: 'Category not found' });
+      }
+
+      res.json(category);
+    } catch (error) {
+      logger.error('Get category by slug error:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  },
+
   // Create category (admin only)
   create: async (req: Request, res: Response) => {
     try {
