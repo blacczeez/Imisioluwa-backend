@@ -73,15 +73,24 @@ export const productController = {
     }
   },
 
-  // Get single product by slug (public)
+  // Get single product by slug or id (public) — supports /product/my-slug or /product/uuid for backwards compatibility
   getBySlug: async (req: Request, res: Response) => {
     try {
       const { slug } = req.params;
 
-      const product = await prisma.product.findUnique({
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
+
+      let product = await prisma.product.findUnique({
         where: { slug },
         include: { category: true },
       });
+
+      if (!product && isUuid) {
+        product = await prisma.product.findUnique({
+          where: { id: slug },
+          include: { category: true },
+        });
+      }
 
       if (!product) {
         return res.status(404).json({ error: 'Product not found' });
