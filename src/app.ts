@@ -11,6 +11,7 @@ import { startPaymentExpiryJob } from './jobs/paymentExpiry';
 import { settingsController } from './controllers/settingsController';
 import { shippingController } from './controllers/shippingController';
 import { sitemapController } from './controllers/sitemapController';
+import { geoController } from './controllers/geoController';
 
 // Load environment variables
 dotenv.config();
@@ -52,6 +53,7 @@ app.use('/api/admin', adminRoutes);
 // Public routes (no auth)
 app.get('/api/settings/payment-methods', settingsController.getPaymentMethods);
 app.get('/api/shipping/rate', shippingController.getRateByCountry);
+app.get('/api/geo', geoController.getCountry);
 
 // Register event listeners
 registerEmailListeners();
