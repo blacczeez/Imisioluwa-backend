@@ -17,6 +17,8 @@ router.post(
     body('payment_method').isIn(['online', 'cod']).withMessage('Payment method must be online or cod'),
     body('currency').optional().isIn(['NGN', 'USD', 'GBP', 'EUR']).withMessage('Invalid currency'),
     body('country').optional().isLength({ min: 2, max: 2 }).withMessage('Country must be ISO 2-letter code'),
+    body('shipping_state').optional().isString().withMessage('Shipping state must be text'),
+    body('shipping_lga').optional().isString().withMessage('Shipping LGA must be text'),
     validate,
   ],
   orderController.create

@@ -3,6 +3,7 @@ import prisma from '../utils/database';
 import { generateOrderNumber } from '../utils/helpers';
 import { logger } from '../utils/logger';
 import { orderEmitter, ORDER_EVENTS, OrderEventPayload } from '../events/orderEvents';
+import { getNigeriaLgaDefaultShippingPrice } from '../utils/nigeriaShipping';
 
 function buildEventPayload(order: any, paymentMethod: string): OrderEventPayload {
   return {
@@ -46,6 +47,8 @@ export const orderController = {
         payment_method,
         currency,
         country,
+        shipping_state,
+        shipping_lga,
       } = req.body;
 
       if (!items || items.length === 0) {
@@ -113,16 +116,43 @@ export const orderController = {
       let shipping_cost = 0;
       if (country) {
         const countryCode = country.toUpperCase();
-        const zone = await prisma.shippingZone.findFirst({
-          where: { is_active: true, countries: { has: countryCode } },
-        }) || await prisma.shippingZone.findFirst({
-          where: { is_active: true, countries: { has: '*' } },
-        });
+        if (countryCode === 'NG') {
+          if (!shipping_state || !shipping_lga) {
+            return res.status(400).json({ error: 'State and local government are required for Nigeria shipping' });
+          }
 
-        if (zone) {
-          shipping_cost = zone.flat_rate;
-          if (zone.free_shipping_above && total_amount >= zone.free_shipping_above) {
-            shipping_cost = 0;
+          const nigeriaRate = await prisma.nigeriaLgaShippingRate.findFirst({
+            where: {
+              state: shipping_state,
+              lga: shipping_lga,
+              is_active: true,
+            },
+          });
+
+          if (nigeriaRate) {
+            shipping_cost = nigeriaRate.price;
+          } else {
+            const defaultPrice = await getNigeriaLgaDefaultShippingPrice();
+            if (defaultPrice === null) {
+              return res.status(400).json({
+                error:
+                  'Shipping is not set for this LGA. Add a price for it in admin or set a default Nigeria shipping amount.',
+              });
+            }
+            shipping_cost = defaultPrice;
+          }
+        } else {
+          const zone = await prisma.shippingZone.findFirst({
+            where: { is_active: true, countries: { has: countryCode } },
+          }) || await prisma.shippingZone.findFirst({
+            where: { is_active: true, countries: { has: '*' } },
+          });
+
+          if (zone) {
+            shipping_cost = zone.flat_rate;
+            if (zone.free_shipping_above && total_amount >= zone.free_shipping_above) {
+              shipping_cost = 0;
+            }
           }
         }
       }
@@ -144,6 +174,8 @@ export const orderController = {
           payment_method,
           currency: orderCurrency,
           country: country?.toUpperCase() || null,
+          shipping_state: shipping_state || null,
+          shipping_lga: shipping_lga || null,
           shipping_cost,
           items: {
             create: orderItems,

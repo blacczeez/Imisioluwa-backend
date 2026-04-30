@@ -85,6 +85,15 @@ export const productController = {
         include: { category: true },
       });
 
+      if (!product) {
+        product = await prisma.product.findFirst({
+          where: {
+            slug: { equals: slug, mode: 'insensitive' },
+          },
+          include: { category: true },
+        });
+      }
+
       if (!product && isUuid) {
         product = await prisma.product.findUnique({
           where: { id: slug },

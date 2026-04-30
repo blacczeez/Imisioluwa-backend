@@ -70,5 +70,8 @@ router.get('/shipping-zones', shippingController.getAll);
 router.post('/shipping-zones', shippingController.create);
 router.put('/shipping-zones/:id', shippingController.update);
 router.delete('/shipping-zones/:id', shippingController.delete);
+router.get('/shipping-nigeria-rates', shippingController.getNigeriaRates);
+router.post('/shipping-nigeria-rates', shippingController.upsertNigeriaRate);
+router.delete('/shipping-nigeria-rates/:id', shippingController.deleteNigeriaRate);
 
 export default router;

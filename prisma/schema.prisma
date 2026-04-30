@@ -82,6 +82,8 @@ model Order {
   payment_reference String?
   currency         String    @default("NGN")
   country          String?
+  shipping_state   String?
+  shipping_lga     String?
   shipping_cost    Float     @default(0)
   payment_gateway  String?
   notes            String?       @db.Text
@@ -94,6 +96,19 @@ model Order {
   deliveries Delivery[]
 
   @@map("orders")
+}
+
+model NigeriaLgaShippingRate {
+  id         String   @id @default(uuid())
+  state      String
+  lga        String
+  price      Float
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([state, lga])
+  @@map("nigeria_lga_shipping_rates")
 }
 
 model OrderItem {
