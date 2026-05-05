@@ -33,6 +33,9 @@ export const categoryController = {
         include: {
           products: {
             where: { is_active: true, stock_quantity: { gt: 0 } },
+            include: {
+              variants: { orderBy: { weight_ml: 'asc' } },
+            },
             orderBy: { created_at: 'desc' },
           },
         },

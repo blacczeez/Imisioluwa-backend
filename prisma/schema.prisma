@@ -47,8 +47,29 @@ model Product {
   category       Category        @relation(fields: [category_id], references: [id])
   order_items    OrderItem[]
   inventory_logs InventoryLog[]
+  variants       ProductVariant[]
 
   @@map("products")
+}
+
+model ProductVariant {
+  id             String   @id @default(uuid())
+  product_id     String
+  weight_ml      Int
+  price          Float
+  price_usd      Float?
+  price_gbp      Float?
+  price_eur      Float?
+  stock_quantity Int      @default(0)
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  product    Product     @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  order_items OrderItem[]
+
+  @@unique([product_id, weight_ml])
+  @@map("product_variants")
 }
 
 model Category {
@@ -115,13 +136,15 @@ model OrderItem {
   id         String   @id @default(uuid())
   order_id   String
   product_id String
+  variant_id String?
   quantity   Int
   unit_price Float
   subtotal   Float
   created_at DateTime @default(now())
 
-  order   Order   @relation(fields: [order_id], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [product_id], references: [id])
+  order   Order           @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [product_id], references: [id])
+  variant ProductVariant? @relation(fields: [variant_id], references: [id])
 
   @@map("order_items")
 }

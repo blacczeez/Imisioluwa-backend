@@ -21,6 +21,8 @@ export interface OrderEventPayload {
   paymentMethod: string;
   items: Array<{
     productId: string;
+    variantId?: string;
+    variantWeightMl?: number | null;
     productName: string;
     quantity: number;
     unitPrice: number;

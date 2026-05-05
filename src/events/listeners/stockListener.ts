@@ -6,10 +6,17 @@ export function registerStockListeners() {
   orderEmitter.on(ORDER_EVENTS.CANCELLED, async (payload: OrderEventPayload) => {
     try {
       for (const item of payload.items) {
-        await prisma.product.update({
-          where: { id: item.productId },
-          data: { stock_quantity: { increment: item.quantity } },
-        });
+        if (item.variantId) {
+          await prisma.productVariant.update({
+            where: { id: item.variantId },
+            data: { stock_quantity: { increment: item.quantity } },
+          });
+        } else {
+          await prisma.product.update({
+            where: { id: item.productId },
+            data: { stock_quantity: { increment: item.quantity } },
+          });
+        }
 
         await prisma.inventoryLog.create({
           data: {

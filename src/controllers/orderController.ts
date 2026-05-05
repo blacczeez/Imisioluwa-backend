@@ -17,7 +17,9 @@ function buildEventPayload(order: any, paymentMethod: string): OrderEventPayload
     paymentMethod,
     items: order.items.map((item: any) => ({
       productId: item.product_id,
+      variantId: item.variant_id,
       productName: item.product?.name_en || '',
+      variantWeightMl: item.variant?.weight_ml || null,
       quantity: item.quantity,
       unitPrice: item.unit_price,
       subtotal: item.subtotal,
@@ -80,21 +82,36 @@ export const orderController = {
       const orderItems = [];
 
       for (const item of items) {
-        const product = await prisma.product.findUnique({
-          where: { id: item.product_id },
-        });
+        const variantId = item.variant_id as string | undefined;
+        const productId = item.product_id as string | undefined;
+
+        const variant = variantId
+          ? await prisma.productVariant.findUnique({
+            where: { id: variantId },
+            include: { product: true },
+          })
+          : null;
+
+        const product = variant
+          ? variant.product
+          : productId
+            ? await prisma.product.findUnique({
+              where: { id: productId },
+            })
+            : null;
 
         if (!product) {
-          return res.status(404).json({ error: `Product ${item.product_id} not found` });
+          return res.status(404).json({ error: `Product not found for order item` });
         }
 
-        if (product.stock_quantity < item.quantity) {
+        const availableStock = variant ? variant.stock_quantity : product.stock_quantity;
+        if (availableStock < item.quantity) {
           return res.status(400).json({
             error: `Insufficient stock for ${product.name_en}`,
           });
         }
 
-        const price = getProductPrice(product, orderCurrency);
+        const price = variant ? getProductPrice(variant, orderCurrency) : getProductPrice(product, orderCurrency);
         if (price === null || price === undefined) {
           return res.status(400).json({
             error: `${product.name_en} is not available in ${orderCurrency}`,
@@ -105,7 +122,8 @@ export const orderController = {
         total_amount += subtotal;
 
         orderItems.push({
-          product_id: item.product_id,
+          product_id: product.id,
+          ...(variant ? { variant_id: variant.id } : {}),
           quantity: item.quantity,
           unit_price: price,
           subtotal,
@@ -183,17 +201,24 @@ export const orderController = {
         },
         include: {
           items: {
-            include: { product: true },
+            include: { product: true, variant: true },
           },
         },
       });
 
       // Decrement stock and log inventory
       for (const item of orderItems) {
-        await prisma.product.update({
-          where: { id: item.product_id },
-          data: { stock_quantity: { decrement: item.quantity } },
-        });
+        if (item.variant_id) {
+          await prisma.productVariant.update({
+            where: { id: item.variant_id },
+            data: { stock_quantity: { decrement: item.quantity } },
+          });
+        } else {
+          await prisma.product.update({
+            where: { id: item.product_id },
+            data: { stock_quantity: { decrement: item.quantity } },
+          });
+        }
 
         await prisma.inventoryLog.create({
           data: {
@@ -231,7 +256,7 @@ export const orderController = {
           phone: phone as string,
         },
         include: {
-          items: { include: { product: true } },
+          items: { include: { product: true, variant: true } },
           deliveries: true,
         },
       });
@@ -254,7 +279,7 @@ export const orderController = {
       const order = await prisma.order.findUnique({
         where: { id },
         include: {
-          items: { include: { product: true } },
+          items: { include: { product: true, variant: true } },
           deliveries: true,
         },
       });
