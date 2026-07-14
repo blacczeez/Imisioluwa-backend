@@ -3,6 +3,7 @@ import prisma from '../utils/database';
 import { paginate } from '../utils/helpers';
 import { logger } from '../utils/logger';
 import { orderEmitter, ORDER_EVENTS } from '../events/orderEvents';
+import { buildOrderEventPayload } from '../utils/orderEventPayload';
 
 export const adminController = {
   // Get dashboard statistics
@@ -40,6 +41,7 @@ export const adminController = {
             items: {
               include: { product: true },
             },
+            package_items: true,
           },
         }),
       ]);
@@ -96,6 +98,7 @@ export const adminController = {
             items: {
               include: { product: true },
             },
+            package_items: true,
           },
           skip,
           take,
@@ -126,27 +129,12 @@ export const adminController = {
         where: { id },
         data: { status },
         include: {
-          items: { include: { product: true } },
+          items: { include: { product: true, variant: true } },
+          package_items: true,
         },
       });
 
-      const payload = {
-        orderId: order.id,
-        orderNumber: order.order_number,
-        customerName: order.customer_name,
-        customerEmail: order.customer_email,
-        phone: order.phone,
-        deliveryAddress: order.delivery_address,
-        totalAmount: order.total_amount,
-        paymentMethod: order.payment_method || 'online',
-        items: order.items.map((item: any) => ({
-          productId: item.product_id,
-          productName: item.product?.name_en || '',
-          quantity: item.quantity,
-          unitPrice: item.unit_price,
-          subtotal: item.subtotal,
-        })),
-      };
+      const payload = buildOrderEventPayload(order);
 
       if (status === 'OUT_FOR_DELIVERY') {
         orderEmitter.emit(ORDER_EVENTS.OUT_FOR_DELIVERY, payload);

@@ -20,12 +20,24 @@ export interface OrderEventPayload {
   totalAmount: number;
   paymentMethod: string;
   items: Array<{
-    productId: string;
+    productId?: string;
     variantId?: string;
     variantWeightMl?: number | null;
     productName: string;
     quantity: number;
     unitPrice: number;
     subtotal: number;
+  }>;
+  packageItems?: Array<{
+    packageId?: string;
+    packageName: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    contents: Array<{
+      variant_id: string;
+      product_id: string;
+      quantity: number;
+    }>;
   }>;
 }

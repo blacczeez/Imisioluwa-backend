@@ -197,33 +197,17 @@ export const productController = {
         name_yo,
         description_en,
         description_yo,
-        price,
-        price_usd,
-        price_gbp,
-        price_eur,
-        weight_kg,
         variants,
         category_id,
-        stock_quantity,
+        is_active,
       } = req.body;
 
       const normalizedVariants = normalizeVariants(variants);
-      const fallbackWeightMl = Math.max(1, Math.round((parseOptionalFloat(weight_kg) ?? 1) * 1000));
-      const fallbackPrice = parseOptionalFloat(price) ?? 0;
-      const fallbackStock = parseOptionalInt(stock_quantity) ?? 0;
-      const finalVariants = normalizedVariants.length > 0
-        ? normalizedVariants
-        : [{
-          weight_ml: fallbackWeightMl,
-          price: fallbackPrice,
-          price_usd: parseOptionalFloat(price_usd),
-          price_gbp: parseOptionalFloat(price_gbp),
-          price_eur: parseOptionalFloat(price_eur),
-          stock_quantity: fallbackStock,
-          is_active: true,
-        }];
+      if (normalizedVariants.length === 0) {
+        return res.status(400).json({ error: 'At least one valid variant is required' });
+      }
 
-      const primaryVariant = [...finalVariants].sort((a, b) => a.weight_ml - b.weight_ml)[0];
+      const primaryVariant = [...normalizedVariants].sort((a, b) => a.weight_ml - b.weight_ml)[0];
 
       // Generate unique slug from name_en
       let slug = slugify(name_en);
@@ -238,17 +222,18 @@ export const productController = {
           name_yo,
           description_en,
           description_yo,
-          price: parseFloat(price),
-          ...(parseOptionalFloat(price_usd) !== undefined && { price_usd: parseOptionalFloat(price_usd) }),
-          ...(parseOptionalFloat(price_gbp) !== undefined && { price_gbp: parseOptionalFloat(price_gbp) }),
-          ...(parseOptionalFloat(price_eur) !== undefined && { price_eur: parseOptionalFloat(price_eur) }),
+          price: primaryVariant.price,
+          ...(primaryVariant.price_usd !== undefined && { price_usd: primaryVariant.price_usd }),
+          ...(primaryVariant.price_gbp !== undefined && { price_gbp: primaryVariant.price_gbp }),
+          ...(primaryVariant.price_eur !== undefined && { price_eur: primaryVariant.price_eur }),
           weight_kg: primaryVariant.weight_ml / 1000,
           category_id,
           stock_quantity: primaryVariant.stock_quantity,
           image_urls: [],
           slug,
+          ...(is_active !== undefined && { is_active }),
           variants: {
-            create: finalVariants.map((variant) => ({
+            create: normalizedVariants.map((variant) => ({
               weight_ml: variant.weight_ml,
               price: variant.price,
               ...(variant.price_usd !== undefined && { price_usd: variant.price_usd }),
@@ -282,18 +267,15 @@ export const productController = {
         name_yo,
         description_en,
         description_yo,
-        price,
-        price_usd,
-        price_gbp,
-        price_eur,
-        weight_kg,
         variants,
         category_id,
-        stock_quantity,
         is_active,
       } = req.body;
 
       const normalizedVariants = normalizeVariants(variants);
+      if (normalizedVariants.length === 0) {
+        return res.status(400).json({ error: 'At least one valid variant is required' });
+      }
 
       // Regenerate slug if name_en changes
       let slugData: { slug?: string } = {};
@@ -315,13 +297,7 @@ export const productController = {
           ...(name_yo && { name_yo }),
           ...(description_en && { description_en }),
           ...(description_yo && { description_yo }),
-          ...(parseOptionalFloat(price) !== undefined && { price: parseOptionalFloat(price) }),
-          ...(parseOptionalFloat(price_usd) !== undefined && { price_usd: parseOptionalFloat(price_usd) }),
-          ...(parseOptionalFloat(price_gbp) !== undefined && { price_gbp: parseOptionalFloat(price_gbp) }),
-          ...(parseOptionalFloat(price_eur) !== undefined && { price_eur: parseOptionalFloat(price_eur) }),
-          ...(parseOptionalFloat(weight_kg) !== undefined && { weight_kg: parseOptionalFloat(weight_kg) }),
           ...(category_id && { category_id }),
-          ...(stock_quantity !== undefined && { stock_quantity: parseInt(stock_quantity) }),
           ...(is_active !== undefined && { is_active }),
           ...slugData,
         },
@@ -331,68 +307,66 @@ export const productController = {
         },
       });
 
-      if (normalizedVariants.length > 0) {
-        const existingVariants = await prisma.productVariant.findMany({
-          where: { product_id: id },
-          select: { id: true },
-        });
-        const incomingIds = new Set(normalizedVariants.map((variant) => variant.id).filter(Boolean) as string[]);
+      const existingVariants = await prisma.productVariant.findMany({
+        where: { product_id: id },
+        select: { id: true },
+      });
+      const incomingIds = new Set(normalizedVariants.map((variant) => variant.id).filter(Boolean) as string[]);
 
-        await prisma.productVariant.deleteMany({
-          where: {
-            product_id: id,
-            id: { notIn: Array.from(incomingIds) },
-          },
-        });
+      await prisma.productVariant.deleteMany({
+        where: {
+          product_id: id,
+          id: { notIn: Array.from(incomingIds) },
+        },
+      });
 
-        for (const variant of normalizedVariants) {
-          if (variant.id && existingVariants.some((existing) => existing.id === variant.id)) {
-            await prisma.productVariant.update({
-              where: { id: variant.id },
-              data: {
-                weight_ml: variant.weight_ml,
-                price: variant.price,
-                price_usd: variant.price_usd,
-                price_gbp: variant.price_gbp,
-                price_eur: variant.price_eur,
-                stock_quantity: variant.stock_quantity,
-                is_active: variant.is_active,
-              },
-            });
-          } else {
-            await prisma.productVariant.create({
-              data: {
-                product_id: id,
-                weight_ml: variant.weight_ml,
-                price: variant.price,
-                price_usd: variant.price_usd,
-                price_gbp: variant.price_gbp,
-                price_eur: variant.price_eur,
-                stock_quantity: variant.stock_quantity,
-                is_active: variant.is_active,
-              },
-            });
-          }
-        }
-
-        const refreshedVariants = await prisma.productVariant.findMany({
-          where: { product_id: id, is_active: true },
-          orderBy: { weight_ml: 'asc' },
-        });
-        const primaryVariant = refreshedVariants[0];
-        if (primaryVariant) {
-          await prisma.product.update({
-            where: { id },
+      for (const variant of normalizedVariants) {
+        if (variant.id && existingVariants.some((existing) => existing.id === variant.id)) {
+          await prisma.productVariant.update({
+            where: { id: variant.id },
             data: {
-              price: primaryVariant.price,
-              price_usd: primaryVariant.price_usd,
-              price_gbp: primaryVariant.price_gbp,
-              price_eur: primaryVariant.price_eur,
-              stock_quantity: primaryVariant.stock_quantity,
-              weight_kg: primaryVariant.weight_ml / 1000,
+              weight_ml: variant.weight_ml,
+              price: variant.price,
+              price_usd: variant.price_usd,
+              price_gbp: variant.price_gbp,
+              price_eur: variant.price_eur,
+              stock_quantity: variant.stock_quantity,
+              is_active: variant.is_active,
+            },
+          });
+        } else {
+          await prisma.productVariant.create({
+            data: {
+              product_id: id,
+              weight_ml: variant.weight_ml,
+              price: variant.price,
+              price_usd: variant.price_usd,
+              price_gbp: variant.price_gbp,
+              price_eur: variant.price_eur,
+              stock_quantity: variant.stock_quantity,
+              is_active: variant.is_active,
             },
           });
         }
+      }
+
+      const refreshedVariants = await prisma.productVariant.findMany({
+        where: { product_id: id, is_active: true },
+        orderBy: { weight_ml: 'asc' },
+      });
+      const primaryVariant = refreshedVariants[0] || normalizedVariants[0];
+      if (primaryVariant) {
+        await prisma.product.update({
+          where: { id },
+          data: {
+            price: primaryVariant.price,
+            price_usd: primaryVariant.price_usd,
+            price_gbp: primaryVariant.price_gbp,
+            price_eur: primaryVariant.price_eur,
+            stock_quantity: primaryVariant.stock_quantity,
+            weight_kg: primaryVariant.weight_ml / 1000,
+          },
+        });
       }
 
       const updatedProduct = await prisma.product.findUnique({

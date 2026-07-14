@@ -1,5 +1,6 @@
 import prisma from '../utils/database';
 import { orderEmitter, ORDER_EVENTS } from '../events/orderEvents';
+import { buildOrderEventPayload } from '../utils/orderEventPayload';
 import { logger } from '../utils/logger';
 
 export function startPaymentExpiryJob() {
@@ -17,7 +18,8 @@ export function startPaymentExpiryJob() {
           created_at: { lt: cutoff },
         },
         include: {
-          items: { include: { product: true } },
+          items: { include: { product: true, variant: true } },
+          package_items: true,
         },
       });
 
@@ -27,23 +29,7 @@ export function startPaymentExpiryJob() {
           data: { status: 'CANCELLED', payment_status: 'FAILED' },
         });
 
-        orderEmitter.emit(ORDER_EVENTS.CANCELLED, {
-          orderId: order.id,
-          orderNumber: order.order_number,
-          customerName: order.customer_name,
-          customerEmail: order.customer_email,
-          phone: order.phone,
-          deliveryAddress: order.delivery_address,
-          totalAmount: order.total_amount,
-          paymentMethod: 'online',
-          items: order.items.map((item: any) => ({
-            productId: item.product_id,
-            productName: item.product?.name_en || '',
-            quantity: item.quantity,
-            unitPrice: item.unit_price,
-            subtotal: item.subtotal,
-          })),
-        });
+        orderEmitter.emit(ORDER_EVENTS.CANCELLED, buildOrderEventPayload(order, 'online'));
 
         logger.info(`Expired order cancelled: ${order.order_number}`);
       }

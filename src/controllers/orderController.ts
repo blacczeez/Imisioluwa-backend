@@ -4,27 +4,16 @@ import { generateOrderNumber } from '../utils/helpers';
 import { logger } from '../utils/logger';
 import { orderEmitter, ORDER_EVENTS, OrderEventPayload } from '../events/orderEvents';
 import { getNigeriaLgaDefaultShippingPrice } from '../utils/nigeriaShipping';
+import {
+  buildContentsSnapshot,
+  getMaxPackageQuantity,
+  isPackageInStock,
+} from '../utils/packageHelpers';
+
+import { buildOrderEventPayload } from '../utils/orderEventPayload';
 
 function buildEventPayload(order: any, paymentMethod: string): OrderEventPayload {
-  return {
-    orderId: order.id,
-    orderNumber: order.order_number,
-    customerName: order.customer_name,
-    customerEmail: order.customer_email,
-    phone: order.phone,
-    deliveryAddress: order.delivery_address,
-    totalAmount: order.total_amount,
-    paymentMethod,
-    items: order.items.map((item: any) => ({
-      productId: item.product_id,
-      variantId: item.variant_id,
-      productName: item.product?.name_en || '',
-      variantWeightMl: item.variant?.weight_ml || null,
-      quantity: item.quantity,
-      unitPrice: item.unit_price,
-      subtotal: item.subtotal,
-    })),
-  };
+  return buildOrderEventPayload(order, paymentMethod);
 }
 
 function getProductPrice(product: any, currency: string): number | null {
@@ -79,9 +68,73 @@ export const orderController = {
 
       // Calculate total and verify stock
       let total_amount = 0;
-      const orderItems = [];
+      const orderItems: Array<{
+        product_id: string;
+        variant_id?: string;
+        quantity: number;
+        unit_price: number;
+        subtotal: number;
+      }> = [];
+      const orderPackageItems: Array<{
+        package_id: string;
+        package_name: string;
+        quantity: number;
+        unit_price: number;
+        subtotal: number;
+        contents_snapshot: Array<{ variant_id: string; product_id: string; quantity: number }>;
+        stockEntries: Array<{ variant_id: string; product_id: string; quantity: number }>;
+      }> = [];
 
       for (const item of items) {
+        if (item.package_id) {
+          if (orderCurrency !== 'NGN') {
+            return res.status(400).json({ error: 'Packages are only available for orders in Naira' });
+          }
+
+          const pkg = await prisma.package.findUnique({
+            where: { id: item.package_id },
+            include: {
+              items: {
+                include: {
+                  variant: { include: { product: true } },
+                },
+              },
+            },
+          });
+
+          if (!pkg || !pkg.is_active) {
+            return res.status(404).json({ error: 'Package not found' });
+          }
+
+          if (!isPackageInStock(pkg)) {
+            return res.status(400).json({ error: `${pkg.name_en} is currently out of stock` });
+          }
+
+          const maxQuantity = getMaxPackageQuantity(pkg);
+          if (item.quantity > maxQuantity) {
+            return res.status(400).json({ error: `Insufficient stock for ${pkg.name_en}` });
+          }
+
+          const unitPrice = pkg.price;
+          const subtotal = unitPrice * item.quantity;
+          total_amount += subtotal;
+
+          const contentsSnapshot = buildContentsSnapshot(pkg);
+          orderPackageItems.push({
+            package_id: pkg.id,
+            package_name: pkg.name_en,
+            quantity: item.quantity,
+            unit_price: unitPrice,
+            subtotal,
+            contents_snapshot: contentsSnapshot,
+            stockEntries: contentsSnapshot.map((entry) => ({
+              ...entry,
+              quantity: entry.quantity * item.quantity,
+            })),
+          });
+          continue;
+        }
+
         const variantId = item.variant_id as string | undefined;
         const productId = item.product_id as string | undefined;
 
@@ -198,11 +251,19 @@ export const orderController = {
           items: {
             create: orderItems,
           },
+          ...(orderPackageItems.length > 0
+            ? {
+                package_items: {
+                  create: orderPackageItems.map(({ stockEntries, ...entry }) => entry),
+                },
+              }
+            : {}),
         },
         include: {
           items: {
             include: { product: true, variant: true },
           },
+          package_items: true,
         },
       });
 
@@ -228,6 +289,24 @@ export const orderController = {
             notes: `Order ${order.order_number}`,
           },
         });
+      }
+
+      for (const packageItem of orderPackageItems) {
+        for (const entry of packageItem.stockEntries) {
+          await prisma.productVariant.update({
+            where: { id: entry.variant_id },
+            data: { stock_quantity: { decrement: entry.quantity } },
+          });
+
+          await prisma.inventoryLog.create({
+            data: {
+              product_id: entry.product_id,
+              change_type: 'SALE',
+              quantity_change: -entry.quantity,
+              notes: `Order ${order.order_number} (${packageItem.package_name})`,
+            },
+          });
+        }
       }
 
       // Emit event
@@ -257,6 +336,7 @@ export const orderController = {
         },
         include: {
           items: { include: { product: true, variant: true } },
+          package_items: true,
           deliveries: true,
         },
       });
@@ -280,6 +360,7 @@ export const orderController = {
         where: { id },
         include: {
           items: { include: { product: true, variant: true } },
+          package_items: true,
           deliveries: true,
         },
       });

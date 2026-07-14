@@ -19,6 +19,7 @@ dotenv.config();
 // Import routes
 import authRoutes from './routes/authRoutes';
 import productRoutes from './routes/productRoutes';
+import packageRoutes from './routes/packageRoutes';
 import categoryRoutes from './routes/categoryRoutes';
 import orderRoutes from './routes/orderRoutes';
 import paymentRoutes from './routes/paymentRoutes';
@@ -45,6 +46,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/packages', packageRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);

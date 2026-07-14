@@ -6,6 +6,10 @@ export function registerStockListeners() {
   orderEmitter.on(ORDER_EVENTS.CANCELLED, async (payload: OrderEventPayload) => {
     try {
       for (const item of payload.items) {
+        if (!item.productId) {
+          continue;
+        }
+
         if (item.variantId) {
           await prisma.productVariant.update({
             where: { id: item.variantId },
@@ -27,6 +31,26 @@ export function registerStockListeners() {
           },
         });
       }
+
+      for (const packageItem of payload.packageItems || []) {
+        for (const entry of packageItem.contents) {
+          const restoreQty = entry.quantity * packageItem.quantity;
+          await prisma.productVariant.update({
+            where: { id: entry.variant_id },
+            data: { stock_quantity: { increment: restoreQty } },
+          });
+
+          await prisma.inventoryLog.create({
+            data: {
+              product_id: entry.product_id,
+              change_type: 'ADJUSTMENT',
+              quantity_change: restoreQty,
+              notes: `Stock restored - Order ${payload.orderNumber} cancelled (${packageItem.packageName})`,
+            },
+          });
+        }
+      }
+
       logger.info(`Stock restored for cancelled order ${payload.orderNumber}`);
     } catch (error) {
       logger.error('Stock listener error (cancelled):', error);

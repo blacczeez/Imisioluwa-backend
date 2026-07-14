@@ -23,9 +23,11 @@ router.post(
     body('name_yo').notEmpty().withMessage('Yoruba name is required'),
     body('description_en').notEmpty().withMessage('English description is required'),
     body('description_yo').notEmpty().withMessage('Yoruba description is required'),
-    body('price').isFloat({ gt: 0 }).withMessage('Valid price is required'),
     body('category_id').notEmpty().withMessage('Category is required'),
-    body('stock_quantity').isInt({ min: 0 }).withMessage('Valid stock quantity is required'),
+    body('variants').isArray({ min: 1 }).withMessage('At least one variant is required'),
+    body('variants.*.weight_ml').isInt({ gt: 0 }).withMessage('Variant weight must be greater than 0'),
+    body('variants.*.price').isFloat({ gt: 0 }).withMessage('Variant NGN price must be greater than 0'),
+    body('variants.*.stock_quantity').isInt({ min: 0 }).withMessage('Variant stock cannot be negative'),
     validate,
   ],
   productController.create
